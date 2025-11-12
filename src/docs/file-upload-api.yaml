@@ -1,0 +1,623 @@
+openapi: 3.0.0
+info:
+  title: LearnApp File Upload API
+  description: Comprehensive file upload and management API with progress tracking, bulk operations, and advanced search
+  version: 1.0.0
+
+paths:
+  /api/files/upload:
+    post:
+      summary: Upload a single file
+      description: Upload a single file with progress tracking support
+      tags:
+        - File Upload
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to upload (PDF, images, videos)
+      responses:
+        '201':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      filename:
+                        type: string
+                      originalName:
+                        type: string
+                      mimeType:
+                        type: string
+                      size:
+                        type: integer
+                      url:
+                        type: string
+                        format: uri
+                      uploadId:
+                        type: string
+                        format: uuid
+                        description: ID for tracking upload progress
+                  timestamp:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/files/upload-multiple:
+    post:
+      summary: Upload multiple files
+      description: Upload up to 5 files at once with progress tracking
+      tags:
+        - File Upload
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  maxItems: 5
+      responses:
+        '201':
+          description: Files uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      files:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/FileMetadata'
+                      uploadId:
+                        type: string
+                        format: uuid
+
+  /api/files/progress/{uploadId}:
+    get:
+      summary: Get upload progress
+      description: Track the progress of a file upload
+      tags:
+        - File Upload
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Upload progress retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/UploadProgress'
+
+  /api/files/bulk/delete:
+    post:
+      summary: Bulk delete files
+      description: Delete multiple files at once
+      tags:
+        - Bulk Operations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fileIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  minItems: 1
+                  maxItems: 50
+      responses:
+        '200':
+          description: Bulk delete operation completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BulkOperationResult'
+
+  /api/files/bulk/move:
+    post:
+      summary: Bulk move files
+      description: Move multiple files to a different category
+      tags:
+        - Bulk Operations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fileIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  minItems: 1
+                  maxItems: 50
+                targetCategory:
+                  type: string
+                  enum: [pdfs, images, videos, temp]
+      responses:
+        '200':
+          description: Bulk move operation completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/BulkOperationResult'
+
+  /api/files/search:
+    get:
+      summary: Search files
+      description: Advanced file search with multiple filters
+      tags:
+        - File Management
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: Search query for filename or original name
+          schema:
+            type: string
+        - name: mimeType
+          in: query
+          description: Filter by MIME type
+          schema:
+            type: string
+        - name: category
+          in: query
+          description: Filter by file category
+          schema:
+            type: string
+            enum: [pdfs, images, videos, temp]
+        - name: dateFrom
+          in: query
+          description: Filter files created after this date
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          description: Filter files created before this date
+          schema:
+            type: string
+            format: date
+        - name: minSize
+          in: query
+          description: Minimum file size in bytes
+          schema:
+            type: integer
+        - name: maxSize
+          in: query
+          description: Maximum file size in bytes
+          schema:
+            type: integer
+        - name: uploadedBy
+          in: query
+          description: Filter by uploader user ID (admin only)
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of results per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Search results retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/FileSearchResult'
+
+  /api/files/detailed/{id}:
+    get:
+      summary: Get detailed file metadata
+      description: Get comprehensive file information including access history
+      tags:
+        - File Management
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detailed file metadata retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/DetailedFileMetadata'
+
+  /api/files/{id}:
+    delete:
+      summary: Delete a file
+      description: Delete a single file and its metadata
+      tags:
+        - File Management
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: File deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+  /api/files/{category}/{filename}:
+    get:
+      summary: Serve file
+      description: Serve file content with access control
+      tags:
+        - File Access
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [pdfs, images, videos, temp]
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    FileMetadata:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        originalName:
+          type: string
+        mimeType:
+          type: string
+        size:
+          type: integer
+        url:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+
+    DetailedFileMetadata:
+      allOf:
+        - $ref: '#/components/schemas/FileMetadata'
+        - type: object
+          properties:
+            sizeFormatted:
+              type: string
+            category:
+              type: string
+            uploader:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [ADMIN, TEACHER, STUDENT, PARENT]
+            fileExists:
+              type: boolean
+            lastModified:
+              type: string
+              format: date-time
+            isPublic:
+              type: boolean
+            downloadCount:
+              type: integer
+            tags:
+              type: array
+              items:
+                type: string
+
+    UploadProgress:
+      type: object
+      properties:
+        uploadId:
+          type: string
+          format: uuid
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed]
+        totalSize:
+          type: integer
+        uploadedSize:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+        estimatedTimeRemaining:
+          type: integer
+          description: Estimated time remaining in seconds
+
+    BulkOperationResult:
+      type: object
+      properties:
+        deleted:
+          type: array
+          items:
+            type: string
+            format: uuid
+        failed:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              error:
+                type: string
+        summary:
+          type: object
+          properties:
+            total:
+              type: integer
+            successful:
+              type: integer
+            failed:
+              type: integer
+
+    FileSearchResult:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetailedFileMetadata'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+            totalPages:
+              type: integer
+            hasNext:
+              type: boolean
+            hasPrev:
+              type: boolean
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: UNAUTHORIZED
+                  message:
+                    type: string
+                    example: User not authenticated
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: ACCESS_DENIED
+                  message:
+                    type: string
+                    example: Access denied
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: FILE_NOT_FOUND
+                  message:
+                    type: string
+                    example: File not found
+
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: RATE_LIMIT_EXCEEDED
+                  message:
+                    type: string
+                    example: Too many file uploads, please wait before uploading more files

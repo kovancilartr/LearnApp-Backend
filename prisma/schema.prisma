@@ -1,0 +1,338 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String           @id @default(uuid())
+  email          String           @unique @db.VarChar(255)
+  name           String           @db.VarChar(100)
+  password       String           @db.VarChar(255)
+  role           Role
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  uploadedFiles  File[]
+  notifications  Notification[]
+  parentProfile  Parent?
+  preferences    UserPreferences?
+  refreshTokens  RefreshToken[]
+  studentProfile Student?
+  teacherProfile Teacher?
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique @db.VarChar(500)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model UserPreferences {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  preferences Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_preferences")
+}
+
+model Student {
+  id                 String              @id @default(uuid())
+  userId             String              @unique
+  parentId           String?
+  attempts           Attempt[]
+  completions        Completion[]
+  enrollmentRequests EnrollmentRequest[]
+  enrollments        Enrollment[]
+  parent             Parent?             @relation(fields: [parentId], references: [id])
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([parentId])
+  @@map("students")
+}
+
+model Teacher {
+  id      String   @id @default(uuid())
+  userId  String   @unique
+  courses Course[]
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("teachers")
+}
+
+model Parent {
+  id       String    @id @default(uuid())
+  userId   String    @unique
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  children Student[]
+
+  @@index([userId])
+  @@map("parents")
+}
+
+model Course {
+  id                 String              @id @default(uuid())
+  title              String              @db.VarChar(200)
+  description        String?
+  teacherId          String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  teacher            Teacher?            @relation(fields: [teacherId], references: [id])
+  enrollmentRequests EnrollmentRequest[]
+  enrollments        Enrollment[]
+  quizzes            Quiz[]
+  sections           Section[]
+
+  @@index([teacherId])
+  @@index([title])
+  @@index([createdAt])
+  @@map("courses")
+}
+
+model Section {
+  id       String   @id @default(uuid())
+  title    String   @db.VarChar(200)
+  order    Int      @default(0)
+  courseId String
+  lessons  Lesson[]
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, order])
+  @@index([courseId])
+  @@index([order])
+  @@map("sections")
+}
+
+model Lesson {
+  id          String       @id @default(uuid())
+  title       String       @db.VarChar(200)
+  content     String?
+  videoUrl    String?      @db.VarChar(500)
+  pdfUrl      String?      @db.VarChar(500)
+  order       Int          @default(0)
+  sectionId   String
+  completions Completion[]
+  section     Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, order])
+  @@index([sectionId])
+  @@index([order])
+  @@map("lessons")
+}
+
+model Enrollment {
+  id        String   @id @default(uuid())
+  studentId String
+  courseId  String
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([createdAt])
+  @@map("enrollments")
+}
+
+model EnrollmentRequest {
+  id         String           @id @default(uuid())
+  studentId  String
+  courseId   String
+  status     EnrollmentStatus @default(PENDING)
+  message    String?
+  adminNote  String?
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  course     Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([reviewedBy])
+  @@map("enrollment_requests")
+}
+
+model Completion {
+  id        String   @id @default(uuid())
+  studentId String
+  lessonId  String
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, lessonId])
+  @@index([studentId])
+  @@index([lessonId])
+  @@index([completed])
+  @@index([createdAt])
+  @@map("completions")
+}
+
+model Quiz {
+  id              String     @id @default(uuid())
+  title           String     @db.VarChar(200)
+  courseId        String
+  duration        Int?
+  attemptsAllowed Int        @default(1)
+  createdAt       DateTime   @default(now())
+  attempts        Attempt[]
+  questions       Question[]
+  course          Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@index([title])
+  @@index([createdAt])
+  @@map("quizzes")
+}
+
+model Question {
+  id        String     @id @default(uuid())
+  quizId    String
+  text      String
+  imageUrl  String?    @db.VarChar(500)
+  order     Int        @default(0)
+  choices   Choice[]
+  quiz      Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  responses Response[]
+
+  @@unique([quizId, order])
+  @@index([quizId])
+  @@index([order])
+  @@map("questions")
+}
+
+model Choice {
+  id         String     @id @default(uuid())
+  questionId String
+  label      String     @db.VarChar(1)
+  text       String
+  correct    Boolean    @default(false)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  responses  Response[]
+
+  @@unique([questionId, label])
+  @@index([questionId])
+  @@index([correct])
+  @@map("choices")
+}
+
+model Attempt {
+  id         String     @id @default(uuid())
+  studentId  String
+  quizId     String
+  startedAt  DateTime   @default(now())
+  finishedAt DateTime?
+  score      Float?
+  quiz       Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  responses  Response[]
+
+  @@index([studentId])
+  @@index([quizId])
+  @@index([startedAt])
+  @@index([finishedAt])
+  @@index([score])
+  @@map("attempts")
+}
+
+model Response {
+  id         String   @id @default(uuid())
+  attemptId  String
+  questionId String
+  choiceId   String?
+  attempt    Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  choice     Choice?  @relation(fields: [choiceId], references: [id])
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+  @@index([choiceId])
+  @@map("responses")
+}
+
+model File {
+  id           String   @id @default(uuid())
+  filename     String   @unique @db.VarChar(255)
+  originalName String   @db.VarChar(255)
+  mimeType     String   @db.VarChar(100)
+  size         Int
+  path         String   @db.VarChar(500)
+  url          String   @db.VarChar(500)
+  cdnUrl       String?  @db.VarChar(500)
+  uploadedBy   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  uploader     User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([uploadedBy])
+  @@index([mimeType])
+  @@index([createdAt])
+  @@map("files")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  title     String           @db.VarChar(200)
+  message   String
+  type      NotificationType
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum EnrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  ENROLLMENT_APPROVED
+  ENROLLMENT_REJECTED
+  COURSE_UPDATE
+  QUIZ_RESULT
+  SYSTEM_ANNOUNCEMENT
+}
